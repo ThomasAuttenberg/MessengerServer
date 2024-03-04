@@ -7,7 +7,7 @@ public class SocketTester {
         Socket socket;
         try {
             socket = new Socket("127.0.0.1",9000);
-            socket.getOutputStream().write("Hello there\n".getBytes(StandardCharsets.UTF_8));
+            socket.getOutputStream().write("Authorization\n".getBytes(StandardCharsets.UTF_8));
             socket.getOutputStream().flush();
         } catch (IOException e) {
             throw new RuntimeException(e);

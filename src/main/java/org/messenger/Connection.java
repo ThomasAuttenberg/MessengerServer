@@ -7,6 +7,8 @@ import java.net.Socket;
 
 public class Connection extends Thread{
 
+    User user = null;
+
     private Boolean isRunning = true;
     private final Socket socket;
 
@@ -16,10 +18,14 @@ public class Connection extends Thread{
 
     @Override
     public void run() {
-        ConnectionManager.handleConnection(socket, isRunning);
+        ConnectionManager.handleConnection(this, isRunning);
     }
 
     public void disconnect() {
         isRunning = false;
+    }
+
+    public Socket socket(){
+        return socket;
     }
 }
