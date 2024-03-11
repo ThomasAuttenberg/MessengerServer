@@ -1,23 +1,28 @@
 package org.messenger;
 
-import org.json.simple.JSONObject;
-import org.json.simple.parser.ParseException;
-
+import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.net.Socket;
 import java.net.URI;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.*;
+import java.util.Arrays;
 
 public class SecuredConnection extends Connection{
 
     private static final KeyPairGenerator keyPairGenerator;
-    private static Key privateKey;
-    private static Key publicKey;
-    private static final Cipher encryptCipher;
-    private static final Cipher decryptCipher;
-    private Key usersPublicKey;
+    private static Key RSAprivateKey;
+    private static Key RSApublicKey;
+    private static final Cipher RSAencryptCipher;
+    private static final Cipher RSAdecryptCipher;
+    private Key userSecretKey;
+    private Cipher userEncryptCipher;
+    private Cipher userDecryptCipher;
 
     static{
 
@@ -27,24 +32,32 @@ public class SecuredConnection extends Connection{
             throw new RuntimeException(e);
         }
 
-        URI publicKeyFileURL = URI.create("src/main/resources/publicKey");
-        URI privateKeyFileURL = URI.create("src/main/resources/privateKey");
+        String publicKeyPath = "src/main/resources/publicKey";
+        String privateKeyPath = "src/main/resources/privateKey";
+
+        Path publicKeyPathObj = Paths.get(publicKeyPath).toAbsolutePath();
+        Path privateKeyPathObj = Paths.get(privateKeyPath).toAbsolutePath();
+
+        URI publicKeyFileURL = publicKeyPathObj.toUri();
+        URI privateKeyFileURL = privateKeyPathObj.toUri();
+
         File publicKeyFile = new File(publicKeyFileURL);
         File privateKeyFile = new File(privateKeyFileURL);
+
         try {
             FileInputStream fileInputStream = new FileInputStream(publicKeyFile);
             ObjectInputStream objectInputStream = new ObjectInputStream(fileInputStream);
-            publicKey = (Key) objectInputStream.readObject();
+            RSApublicKey = (Key) objectInputStream.readObject();
             fileInputStream = new FileInputStream(privateKeyFile);
             objectInputStream = new ObjectInputStream(fileInputStream);
-            privateKey = (Key) objectInputStream.readObject();
+            RSAprivateKey = (Key) objectInputStream.readObject();
         } catch (IOException | ClassNotFoundException e) {
             try {
                 FileOutputStream fileOutputStream = new FileOutputStream(publicKeyFile);
                 ObjectOutputStream objectOutputStream = new ObjectOutputStream(fileOutputStream);
                 KeyPair keys = keyPairGenerator.generateKeyPair();
-                privateKey = keys.getPrivate();
-                publicKey = keys.getPublic();
+                RSAprivateKey = keys.getPrivate();
+                RSApublicKey = keys.getPublic();
                 objectOutputStream.writeObject(keys.getPublic());
                 fileOutputStream = new FileOutputStream(privateKeyFile);
                 objectOutputStream = new ObjectOutputStream(fileOutputStream);
@@ -55,10 +68,10 @@ public class SecuredConnection extends Connection{
         }
 
         try {
-            encryptCipher = Cipher.getInstance("RSA");
-            encryptCipher.init(Cipher.ENCRYPT_MODE, publicKey);
-            decryptCipher = Cipher.getInstance("RSA");
-            decryptCipher.init(Cipher.DECRYPT_MODE,privateKey);
+            RSAencryptCipher = Cipher.getInstance("RSA");
+            RSAencryptCipher.init(Cipher.ENCRYPT_MODE, RSApublicKey);
+            RSAdecryptCipher = Cipher.getInstance("RSA");
+            RSAdecryptCipher.init(Cipher.DECRYPT_MODE, RSAprivateKey);
         } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException e) {
             throw new RuntimeException(e);
         }
@@ -68,23 +81,74 @@ public class SecuredConnection extends Connection{
 
     SecuredConnection(Socket socket) {
         super(socket);
-        JSONObject publicKeyTransmitter = new JSONObject();
-        publicKeyTransmitter.put("publicKey",publicKey);
         try {
-            send(publicKeyTransmitter);
-            usersPublicKey = (Key) getRequest().get("publicKey");
-        } catch (IOException | ParseException e) {
+            super.send(RSApublicKey);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        byte[] bytes;
+        try {
+            bytes = (byte[]) super.getRequest();
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        byte[] decryptedBytes;
+        try {
+            decryptedBytes = RSAdecryptCipher.doFinal(bytes);
+        } catch (IllegalBlockSizeException | BadPaddingException e) {
+            throw new RuntimeException(e);
+        }
+        userSecretKey = new SecretKeySpec(decryptedBytes,"AES");
+        System.out.println(Arrays.toString(userSecretKey.getEncoded()));
+        try {
+            userEncryptCipher = Cipher.getInstance("AES");
+            userDecryptCipher = Cipher.getInstance("AES");
+            userEncryptCipher.init(Cipher.ENCRYPT_MODE,userSecretKey);
+            userDecryptCipher.init(Cipher.DECRYPT_MODE,userSecretKey);
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException e) {
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    public JSONObject getRequest() throws IOException, ParseException {
-        return super.getRequest();
+    public Object getRequest() throws IOException, ClassNotFoundException {
+        //ByteArrayOutputStream objectToBytesStream = new ByteArrayOutputStream();
+       // ObjectOutputStream objectOutputStream = new ObjectOutputStream(objectToBytesStream);
+       // Object requestObject = super.getRequest();
+        //objectOutputStream.writeObject(requestObject);
+        byte[] bytes = (byte[]) super.getRequest();
+        byte[] decryptedBytes = null;
+        try {
+            decryptedBytes = userDecryptCipher.doFinal(bytes);
+        } catch (IllegalBlockSizeException e) {
+            throw new RuntimeException(e);
+        } catch (BadPaddingException e) {
+            throw new RuntimeException(e);
+        }
+        return convertToObject(decryptedBytes);
     }
 
     @Override
-    public void send(JSONObject dataPacket) throws IOException {
-        super.send();
+    public void send(Object object) throws IOException {
+        try {
+            byte[] encryptedBytes = userEncryptCipher.doFinal(convertToByteArray(object));
+            super.send(encryptedBytes);
+        } catch (IllegalBlockSizeException | BadPaddingException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Object convertToObject(byte[] byteArray) throws IOException, ClassNotFoundException {
+        try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(byteArray);
+             ObjectInputStream objectInputStream = new ObjectInputStream(byteArrayInputStream)) {
+            return objectInputStream.readObject();
+        }
+    }
+    public static byte[] convertToByteArray(Object object) throws IOException {
+        try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+             ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream)) {
+            objectOutputStream.writeObject(object);
+            return byteArrayOutputStream.toByteArray();
+        }
     }
 }

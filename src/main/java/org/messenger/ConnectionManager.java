@@ -1,7 +1,6 @@
 package org.messenger;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.ParseException;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -39,22 +38,24 @@ public class ConnectionManager {
 
 
     static void connect(Socket socket){
-        new Connection(socket);
+        new SecuredConnection(socket).start();
     }
 
     static void handleConnection(Connection connection, Boolean isRunning){
 
         while (isRunning){
-            try {
-                JSONObject dataPacket = connection.getRequest();
+            //try {
+                JSONOverConnection jsonOverConnection = new JSONOverConnection(connection);
+                System.out.println("getting request [handler]");
+                JSONObject dataPacket = jsonOverConnection.getRequest();
                 String requestDescription = (String) dataPacket.get("requestDescription");
                 handlersMap.get(requestDescription).handle(connection, dataPacket);
-            } catch (IOException e) {
+          /*  } catch (IOException e) {
                 System.out.println("["+connection.socket().getInetAddress().getHostAddress()+":"+connection.socket().getPort()+"] Client has disconnected");
                 break;
             } catch (ParseException e) {
                 System.out.println("["+connection.socket().getInetAddress().getHostAddress()+":"+connection.socket().getPort()+"] Incorrect packet format");
-            }
+            }*/
         }
         System.out.println("Connection released");
     }

@@ -1,9 +1,5 @@
 package org.messenger;
 
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
-
 import java.io.*;
 import java.net.Socket;
 
@@ -14,15 +10,19 @@ public class Connection extends Thread{
     private final Socket socket;
     private BufferedReader bufferedReader;
     private BufferedWriter bufferedWriter;
+    private ObjectInputStream objectInputStream = null;
+    private ObjectOutputStream objectOutputStream = null;
+    private BufferedInputStream inputStream;
+    private BufferedOutputStream outputStream;
+
     Connection(Socket socket){
         this.socket = socket;
         try {
-            bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            bufferedWriter = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+            inputStream = new BufferedInputStream(socket.getInputStream());
+            outputStream = new BufferedOutputStream(socket.getOutputStream());
         } catch (IOException e) {
-            System.out.println("Unable to get input stream from socket. Client ip:" + socket.getInetAddress().getHostAddress());
+            throw new RuntimeException(e);
         }
-        this.start();
     }
 
     @Override
@@ -50,18 +50,17 @@ public class Connection extends Thread{
     public BufferedWriter getBufferedWriter() throws IOException {
         return bufferedWriter;
     }
-    public JSONObject getRequest() throws IOException, ParseException {
-        String jsonDataString;
-        JSONParser parser = new JSONParser();
-        JSONObject dataPacket = null;
-        if((jsonDataString = bufferedReader.readLine()) != null) {
-            dataPacket = (JSONObject) parser.parse(jsonDataString);
-        }
-        return dataPacket;
+    public Object getRequest() throws IOException, ClassNotFoundException {
+        if(objectInputStream == null) objectInputStream = new ObjectInputStream(inputStream);
+        Object request = null;
+        request = objectInputStream.readObject();
+        return request;
     }
-    public void send(JSONObject dataPacket) throws IOException {
-        bufferedWriter.write(dataPacket.toJSONString() + "\n");
-        bufferedWriter.flush();
+
+    public void send(Object object) throws IOException {
+        if(objectOutputStream == null) objectOutputStream = new ObjectOutputStream(outputStream);
+        objectOutputStream.writeObject(object);
+        objectOutputStream.flush();
     }
 
     @Override
