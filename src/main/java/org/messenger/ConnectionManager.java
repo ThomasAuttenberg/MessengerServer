@@ -1,55 +1,37 @@
 package org.messenger;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.Socket;
 import java.util.HashMap;
 
 
 public class ConnectionManager {
 
-    public interface RequestHandler {public void handle(Connection connection);}
+    public interface RequestHandler {public void handle(Connection connection, JSONObject dataPacket);}
 
     static HashMap<String, RequestHandler> handlersMap = new HashMap<>();
 
     static{
 
 
-        handlersMap.put("Authorization", new RequestHandler() {
-            @Override
-            public void handle(Connection connection) {
-                try {
-
-                    String userName;
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.socket().getInputStream()));
-                    userName = reader.readLine();
-                    connection.user = new User(userName);
-
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+        handlersMap.put("Authorization", (connection, dataPacket) -> {
+            try {
+                JSONObject reply = new JSONObject();
+                reply.put("status","OK");
+                reply.put("desc","Authorization!");
+                connection.send(reply);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
         });
-        handlersMap.put("GetThread", new RequestHandler() {
-            @Override
-            public void handle(Connection connection) {
-            }
+        handlersMap.put("GetThread", (connection, dataPacket) -> {
+
         });
-        handlersMap.put("SendMessage", new RequestHandler() {
-            @Override
-            public void handle(Connection connection) {
-                String line;
-                char[] buffer = new char[1000];
-                try {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.socket().getInputStream()));
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
+        handlersMap.put("SendMessage", (connection, dataPacket) -> {
+
         });
     }
 
@@ -61,33 +43,18 @@ public class ConnectionManager {
     }
 
     static void handleConnection(Connection connection, Boolean isRunning){
-        BufferedReader reader = null;
-        JSONParser parser = new JSONParser();
-        JSONObject dataPacket;
-        try {
-            reader = new BufferedReader(new InputStreamReader(connection.socket().getInputStream()));
-        } catch (IOException e) {
-            isRunning = false;
-        }
 
         while (isRunning){
-            String requestType;
             try {
-                if((requestType = reader.readLine()) != null){
-                    RequestHandler handler = handlersMap.get(requestType);
-                    if(handler != null)
-                        handler.handle(connection);
-                    else
-                        System.out.println("Unable to proceed "+ requestType);
-                }else{
-                    // Unexpected stream closing
-                    isRunning = false;
-                }
+                JSONObject dataPacket = connection.getRequest();
+                String requestDescription = (String) dataPacket.get("requestDescription");
+                handlersMap.get(requestDescription).handle(connection, dataPacket);
             } catch (IOException e) {
-                // Socket closing
-                isRunning = false;
+                System.out.println("["+connection.socket().getInetAddress().getHostAddress()+":"+connection.socket().getPort()+"] Client has disconnected");
+                break;
+            } catch (ParseException e) {
+                System.out.println("["+connection.socket().getInetAddress().getHostAddress()+":"+connection.socket().getPort()+"] Incorrect packet format");
             }
-
         }
         System.out.println("Connection released");
     }

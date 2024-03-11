@@ -13,6 +13,7 @@ public class Main {
     public static void main(String[] args) {
 
         try {
+
             serverSocket = new ServerSocket(serverPort);
             while(isRunning) {
                 Socket connection = serverSocket.accept();
