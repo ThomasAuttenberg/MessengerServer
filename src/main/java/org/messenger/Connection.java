@@ -1,5 +1,7 @@
 package org.messenger;
 
+import org.messenger.data.entities.User;
+
 import java.io.*;
 import java.net.Socket;
 
@@ -12,8 +14,10 @@ public class Connection extends Thread{
     private BufferedWriter bufferedWriter;
     private ObjectInputStream objectInputStream = null;
     private ObjectOutputStream objectOutputStream = null;
-    private BufferedInputStream inputStream;
-    private BufferedOutputStream outputStream;
+    protected BufferedInputStream inputStream;
+    protected BufferedOutputStream outputStream;
+    private User user;
+    //private DataBaseConnection dataBaseConnection = new DataBaseConnection();
 
     Connection(Socket socket){
         this.socket = socket;
@@ -63,6 +67,17 @@ public class Connection extends Thread{
         objectOutputStream.flush();
     }
 
+    public void auth(User user){
+        this.user = user;
+    }
+    public boolean isAuthorized(){
+        return user != null;
+    }
+    public String getIp(){
+        return socket.getInetAddress().getHostAddress();
+    }
+    public int getPort(){return socket.getPort();}
+
     @Override
     public int hashCode() {
         return socket.hashCode();
@@ -74,4 +89,7 @@ public class Connection extends Thread{
             return ((Connection) obj).socket.equals(this.socket);
         return false;
     }
+    public User getUser(){return user;}
+
+
 }

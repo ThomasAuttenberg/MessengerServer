@@ -8,7 +8,7 @@ import java.util.LinkedList;
 
 public class UsersDAO extends DAO<User> {
 
-    UsersDAO() {
+    public UsersDAO() {
         super(User.class);
     }
 

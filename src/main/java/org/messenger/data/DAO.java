@@ -1,5 +1,7 @@
 package org.messenger.data;
 
+import org.messenger.data.annotations.DataBaseField;
+import org.messenger.data.annotations.DataBaseTable;
 import org.messenger.data.interfaces.DBSerializable;
 
 import java.lang.reflect.Field;
@@ -15,8 +17,8 @@ public abstract class DAO<T extends DBSerializable> {
 
     protected DAO(final Class<T> class_){
         this.class_ = class_;
-        org.example.DataBaseTable annotation;
-        if((annotation = class_.getDeclaredAnnotation(org.example.DataBaseTable.class)) == null) throw new RuntimeException(
+        DataBaseTable annotation;
+        if((annotation = class_.getDeclaredAnnotation(DataBaseTable.class)) == null) throw new RuntimeException(
                 "No DataBase table for class "+class_.getSimpleName()+". Use @DataBaseTable to it");
         dataBaseAssociatedTable = annotation.name();
     }
@@ -31,8 +33,8 @@ public abstract class DAO<T extends DBSerializable> {
         Field[] fields = class_.getDeclaredFields();
         boolean isFirst = true;
         for(Field field : fields){
-            org.example.DataBaseField annotation;
-            if((annotation = field.getDeclaredAnnotation(org.example.DataBaseField.class)) != null){
+            DataBaseField annotation;
+            if((annotation = field.getDeclaredAnnotation(DataBaseField.class)) != null){
                 if(!annotation.isSequence()){
                     if(isFirst){
                         isFirst=false;
@@ -42,7 +44,7 @@ public abstract class DAO<T extends DBSerializable> {
                     }
                     try {
                         field.setAccessible(true);
-                        valuesQueryBuilder.append("'"+field.get(entity)+"'");
+                        valuesQueryBuilder.append("'").append(field.get(entity)).append("'");
                     } catch (IllegalAccessException e) {
                         throw new IllegalAccessException("Impossible to get the access to the " +
                                 class_.getSimpleName() + "'s field " + field.getName());
@@ -51,20 +53,20 @@ public abstract class DAO<T extends DBSerializable> {
                 }
             }
         }
-        queryBuilder.append(") VALUES ("+valuesQueryBuilder.toString()+");");
+        queryBuilder.append(") VALUES (").append(valuesQueryBuilder.toString()).append(");");
         DataBaseConnection connection = new DataBaseConnection();
         connection.execute(queryBuilder.toString());
+        connection.close();
     }
     public void delete(T entity) throws SQLException, IllegalAccessException {
         Field[] fields = class_.getDeclaredFields();
         Field primaryKey = null;
         for (Field field : fields) {
-            org.example.DataBaseField annotation;
-            if (field.isAnnotationPresent(org.example.DataBaseField.class)) {
-                annotation = field.getDeclaredAnnotation(org.example.DataBaseField.class);
+            DataBaseField annotation;
+            if (field.isAnnotationPresent(DataBaseField.class)) {
+                annotation = field.getDeclaredAnnotation(DataBaseField.class);
                 if (annotation.isPrimaryKey()) {
                     primaryKey = field;
-                    continue;
                 }
             }
         }
@@ -78,6 +80,8 @@ public abstract class DAO<T extends DBSerializable> {
                     class_.getSimpleName() + "'s field " + primaryKey.getName());
             exception.setStackTrace(e.getStackTrace());
             throw exception;
+        }finally {
+            connection.close();
         }
     }
     public void update(T entity) throws IllegalAccessException, SQLException {
@@ -86,9 +90,9 @@ public abstract class DAO<T extends DBSerializable> {
         StringBuilder query = new StringBuilder("UPDATE " + dataBaseAssociatedTable + " SET ");
         boolean isFirst = true;
         for(Field field : fields){
-            org.example.DataBaseField annotation;
-            if(field.isAnnotationPresent(org.example.DataBaseField.class)){
-                annotation = field.getDeclaredAnnotation(org.example.DataBaseField.class);
+            DataBaseField annotation;
+            if(field.isAnnotationPresent(DataBaseField.class)){
+                annotation = field.getDeclaredAnnotation(DataBaseField.class);
                 if(annotation.isPrimaryKey()) {
                     primaryKey = field;
                     continue;
@@ -108,21 +112,59 @@ public abstract class DAO<T extends DBSerializable> {
         DataBaseConnection connection = new DataBaseConnection();
         System.out.println(query.toString());
         connection.execute(query.toString());
+        connection.close();
     }
+
     protected final <fieldT> LinkedList<T> loadByField(Field field_, fieldT fieldValue) throws SQLException, IllegalAccessException {
         Field[] fields = class_.getDeclaredFields();
 
         field_.setAccessible(true);
         String query = "SELECT * FROM "+dataBaseAssociatedTable+" WHERE "+field_.getName()+" = '"+fieldValue+"';";
         //System.out.println(query);
-        ResultSet set;
+        ResultSet set = null;
+        DataBaseConnection connection = new DataBaseConnection();
         try{
-            DataBaseConnection connection = new DataBaseConnection();
             set = connection.executeQuery(query);
         }catch (SQLException e){
-            throw new SQLException("DataBase connection is unable");
+            connection.close();
+            throw new SQLException("DataBase connection is unable or incorrect query:\n"+e);
         }
         LinkedList<T> linkedList =new LinkedList<T>();
+        while(set.next()) {
+            T entity;
+            try {
+                linkedList.addLast(class_.getConstructor().newInstance());
+                entity = linkedList.getLast();
+            } catch (InstantiationException | InvocationTargetException | NoSuchMethodException e) {
+                connection.close();
+                throw new IllegalAccessException("Impossible to create new instance of "+class_.getSimpleName() +
+                        ".\nCheck it and it's constructor accessibility");
+            }
+            for (Field field : fields) {
+                if(!field.isAnnotationPresent(DataBaseField.class)) continue;
+                field.setAccessible(true);
+                try {
+                    //System.out.println(set.);
+                    field.set(entity, set.getObject(field.getName()));
+                } catch (IllegalAccessException e) {
+                    connection.close();
+                    IllegalAccessException exception = new IllegalAccessException("Impossible to get the access to the " +
+                            class_.getSimpleName() + "'s field " + field.getName());
+                    exception.setStackTrace(e.getStackTrace());
+                    throw exception;
+                } catch (SQLException e) {
+                    connection.close();
+                    throw new SQLException("DataBase reply doesn't contains the coloumn " + field.getName() +
+                            "\n while working with class"+class_.getSimpleName()+"\nCheck if class is correct declared");
+                }
+            }
+        }
+        connection.close();
+        return linkedList;
+    }
+    protected LinkedList<T> resultSetToObjects(ResultSet set) throws SQLException, IllegalAccessException {
+        LinkedList<T> linkedList =new LinkedList<T>();
+        Field[] fields = class_.getDeclaredFields();
         while(set.next()) {
             T entity;
             try {
@@ -133,6 +175,7 @@ public abstract class DAO<T extends DBSerializable> {
                         ".\nCheck it and it's constructor accessibility");
             }
             for (Field field : fields) {
+                if(!field.isAnnotationPresent(DataBaseField.class)) continue;
                 field.setAccessible(true);
                 try {
                     //System.out.println(set.);
