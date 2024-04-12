@@ -88,7 +88,7 @@ public class SocketTester {
            System.out.println(jsonObject);
            jsonObject.clear();
            jsonObject.put("requestDescription","SendMessage");
-           jsonObject.put("threadId",2L);
+           jsonObject.put("threadId",1L);
            jsonObject.put("content","Content by socket tester!");
            //jsonObject.put("threadId",1L);
            connection.send(jsonObject);

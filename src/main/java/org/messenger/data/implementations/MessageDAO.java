@@ -13,7 +13,6 @@ public class MessageDAO extends DAO<Message> {
     public MessageDAO(){
         super(Message.class);
     }
-
     public Message getByMessageId(long messageId){
         LinkedList<Message> messages = null;
         try {

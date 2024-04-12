@@ -15,8 +15,13 @@ import java.util.*;
 
 public class NotificationManager {
 
-    static final HashMap<User, NotificationConnection> notificationConnections = new HashMap<>();
-    static final HashMap<Long, LinkedList<User>> threadToListeningUsers = new HashMap<>();
+    //уведомление от сервака:
+    // Подписка: topicId, время последнего чтения
+
+    //
+
+    static final HashMap<User, NotificationConnection> notificationConnections = new HashMap<>(); // ключ: пользователь, значение: содинение с пользователем
+    static final HashMap<Long, LinkedList<User>> threadToListeningUsers = new HashMap<>(); // ключ: threadId / topicId, значение: пользователИ
 
     public interface RequestHandler {public void handle(Connection connection, JSONObject dataPacket);}
 
@@ -42,20 +47,7 @@ public class NotificationManager {
             }else{
                 UsersDAO usersDAO = new UsersDAO();
                 User user = usersDAO.getById(authToken.getUserid());
-                SubscriptionsDAO subscriptionsDAO = new SubscriptionsDAO();
-                LinkedList<Subscription> userSubscriptions = subscriptionsDAO.getUserSubscriptions(user.getId());
-                for(Subscription sub : userSubscriptions){
-                    if(threadToListeningUsers.containsKey(sub.getParentMessageId())){
-                        if(!threadToListeningUsers.get(sub.getParentMessageId()).contains(user))
-                            threadToListeningUsers.get(sub.getParentMessageId()).add(user);
-                    }else {
-                        LinkedList<User> listeningUsers = new LinkedList<>();
-                        listeningUsers.add(user);
-                       // synchronized (threadToListeningUsers) {
-                        threadToListeningUsers.put(sub.getParentMessageId(), listeningUsers);
-                        //}
-                    }
-                }
+                updateSubscriptions(user);
                 //synchronized (notificationConnections) {
                 notificationConnections.remove(user);
                 notificationConnections.put(user, connection);
@@ -73,6 +65,24 @@ public class NotificationManager {
             throw new RuntimeException(e);
         }
 
+    }
+
+    public static void updateSubscriptions(User user) {
+        SubscriptionsDAO subscriptionsDAO = new SubscriptionsDAO();
+        LinkedList<Subscription> userSubscriptions = subscriptionsDAO.getUserSubscriptions(user.getId());
+        for(Subscription sub : userSubscriptions){
+            if(threadToListeningUsers.containsKey(sub.getParentMessageId())){
+                if(!threadToListeningUsers.get(sub.getParentMessageId()).contains(user))
+                    threadToListeningUsers.get(sub.getParentMessageId()).add(user);
+                System.out.println("USER "+user+" NOW LISTENING "+sub.getParentMessageId());
+            }else {
+                LinkedList<User> listeningUsers = new LinkedList<>();
+                listeningUsers.add(user);
+               // synchronized (threadToListeningUsers) {
+                threadToListeningUsers.put(sub.getParentMessageId(), listeningUsers);
+                //}
+            }
+        }
     }
 
     static void notifyInThread(Long threadId, JSONObject notification){
@@ -140,9 +150,9 @@ public class NotificationManager {
             if(notificationConnection == null) return;
             notificationConnection.send(notification);
         } catch (IOException e) {
-            synchronized (notificationConnections){
+            //synchronized (notificationConnections){
                 notificationConnections.remove(user);
-            }
+            //}
         }
     }
 

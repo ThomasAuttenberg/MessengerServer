@@ -64,6 +64,7 @@ public class Main {
             };
 
             notificationServer = () -> {
+
                 while (isRunning) {
                     try {
                         //ystem.out.println("Waiting for notification connect via socket");

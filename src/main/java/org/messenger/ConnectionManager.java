@@ -22,7 +22,7 @@ import java.util.LinkedList;
 
 public class ConnectionManager {
 
-    public interface RequestHandler {public void handle(Connection connection, JSONObject dataPacket);}
+    public interface RequestHandler {void handle(Connection connection, JSONObject dataPacket);}
 
     static HashMap<String, RequestHandler> handlersMap = new HashMap<>();
 
@@ -117,6 +117,12 @@ public class ConnectionManager {
            Long threadId = (Long) dataPacket.get("threadId");
            MessageDAO messageDAO = new MessageDAO();
            LinkedList<Message> messages = messageDAO.getByParentMessageIdPaginate(threadId, 999999999999999L, MessageDAO.PagingMode.prevMessages,1);
+           if(messages.isEmpty()) {
+               messages = new LinkedList<>();
+               Message firstMessage = messageDAO.getByMessageId(threadId);
+               if(firstMessage != null)
+                    messages.add(messageDAO.getByMessageId(threadId));
+           }
             JSONObject reply;
            if(messages.isEmpty()){
                reply = new JSONObject();
@@ -148,7 +154,7 @@ public class ConnectionManager {
                     JSONObject jsonObject = new JSONObject();
                     jsonObject.put("topic",sub.getParentMessageId());
                     jsonObject.put("lastReadTime",sub.getLastReadTime().getTime());
-                    jsonObject.put("firstMessage",messageDAO.getByParentMessageIdPaginate(sub.getParentMessageId(), 0L, MessageDAO.PagingMode.nextMessages,1).getFirst().getContent());
+                    jsonObject.put("firstMessage",messageDAO.getByMessageId(sub.getParentMessageId()).getContent());
                     jsonObject.put("isNotification",sub.isNotification());
                     subscriptionsArray.add(jsonObject);
                 }
@@ -180,13 +186,25 @@ public class ConnectionManager {
                     }
                 }
                 if (!exists) {
-                    Subscription subscription = new Subscription();
-                    subscription.setLastReadTime(new Date().getTime());
-                    subscription.setParentMessageId(threadId);
-                    subscription.setUserId(connection.getUser().getId());
-                    subscriptionsDAO.create(subscription);
-                    reply.put("status","OK");
-                    reply.put("desc","subscription has been created");
+                    if (threadId == null) {
+                        reply.put("status", "failure");
+                        reply.put("desc", "incorrect threadId");
+                    } else {
+                        MessageDAO messageDAO = new MessageDAO();
+                        if(messageDAO.getByMessageId(threadId) == null){
+                            reply.put("status", "failure");
+                            reply.put("desc", "thread doesn't exists");
+                        }else {
+                            Subscription subscription = new Subscription();
+                            subscription.setLastReadTime(new Date().getTime());
+                            subscription.setParentMessageId(threadId);
+                            subscription.setUserId(connection.getUser().getId());
+                            subscriptionsDAO.create(subscription);
+                            reply.put("status", "OK");
+                            reply.put("desc", "subscription has been created");
+                            NotificationManager.updateSubscriptions(connection.getUser());
+                        }
+                    }
                 }
 
             }else{
@@ -201,6 +219,46 @@ public class ConnectionManager {
                         +"] Unable to send the reply. Connection is closed");
             }
         });
+        handlersMap.put("Unsubscribe", (connection, dataPacket) -> {
+            JSONObject reply = new JSONObject();
+            if(connection.isAuthorized()) {
+                Long threadId = (Long) dataPacket.get("threadId");
+                SubscriptionsDAO subscriptionsDAO = new SubscriptionsDAO();
+                LinkedList<Subscription> subscriptions = subscriptionsDAO.getUserSubscriptions(connection.getUser().getId());
+                if (threadId != null) {
+                    boolean exists = false;
+                    for (Subscription sub : subscriptions) {
+                        if (sub.getParentMessageId() == threadId) {
+                            subscriptionsDAO.delete(sub);
+                            reply.put("status", "OK");
+                            reply.put("desc", "unsubscribed of" + threadId);
+                            exists = true;
+                            NotificationManager.updateSubscriptions(connection.getUser());
+                        }
+                    }
+                    if (!exists) {
+                        if (threadId == null) {
+                            reply.put("status", "failure");
+                            reply.put("desc", "no such subscription");
+                        }
+                    } else {
+                        reply.put("status", "failure");
+                        reply.put("desc", "incorrect threadId");
+                    }
+                }
+            }else{
+                reply.put("status", "failure");
+                reply.put("desc", "you are not authorized");
+            }
+            try {
+                connection.send(reply);
+            } catch (IOException e) {
+                System.out.println("["+connection.getIp()+":"
+                        +connection.getPort()
+                        +"] Unable to send the reply. Connection is closed");
+            }
+        });
+
         handlersMap.put("SendMessage", (connection, dataPacket) -> {
             JSONObject reply = new JSONObject();
             if(connection.isAuthorized()) {
@@ -307,7 +365,15 @@ public class ConnectionManager {
                 request = connection.getRequest();
                 JSONObject dataPacket = (JSONObject) request;
                 String requestDescription = (String) dataPacket.get("requestDescription");
-                handlersMap.get(requestDescription).handle(connection, dataPacket);
+                RequestHandler requestHandler = handlersMap.get(requestDescription);
+                if(requestHandler == null){
+                    JSONObject reply = new JSONObject();
+                    reply.put("status","failure");
+                    reply.put("desc","no such endpoint");
+                    connection.send(reply);
+                }else{
+                    requestHandler.handle(connection,dataPacket);
+                }
             } catch (IOException e) {
                 System.out.println("["+connection.getIp()+":"
                         +connection.getPort()

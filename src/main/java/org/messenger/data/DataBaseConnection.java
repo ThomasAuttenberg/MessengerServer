@@ -13,7 +13,9 @@ public class DataBaseConnection implements Closeable {
 
     private static final HikariDataSource dataSource;
     private Connection connection;
+
     static {
+
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl("jdbc:postgresql://127.0.0.1/postgres");
         config.setUsername("postgres");
