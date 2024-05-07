@@ -26,45 +26,64 @@ public class NotificationManager {
     public interface RequestHandler {public void handle(Connection connection, JSONObject dataPacket);}
 
     static void connect(Socket connectionSocket){
+        new Thread() {
+            @Override
+            public void run() {
 
-        NotificationConnection connection = new NotificationConnection(connectionSocket);
 
-        JSONObject dataPacket = null;
-        try {
-            dataPacket = (JSONObject) connection.getRequest();
-        } catch (IOException | ClassNotFoundException e) {
-            System.out.println("Connection process dropped");
-        }
+                NotificationConnection connection = new NotificationConnection(connectionSocket);
 
-        JSONObject reply = new JSONObject();
-        String receivedToken = (String) dataPacket.get("token");
-        if(receivedToken != null){
-            AuthTokenDAO authTokenDAO = new AuthTokenDAO();
-            AuthToken authToken = authTokenDAO.getByToken(receivedToken);
-            if(authToken == null){
-                reply.put("status","failure");
-                reply.put("desc","can't get the token: incorrect format or it's empty");
-            }else{
-                UsersDAO usersDAO = new UsersDAO();
-                User user = usersDAO.getById(authToken.getUserid());
-                updateSubscriptions(user);
-                //synchronized (notificationConnections) {
-                notificationConnections.remove(user);
-                notificationConnections.put(user, connection);
-               // }
-                reply.put("status","OK");
-                reply.put("desc","notification starts");
+                JSONObject dataPacket = null;
+                try
+
+                {
+                    dataPacket = (JSONObject) connection.getRequest();
+                } catch(IOException |
+                        ClassNotFoundException e)
+
+                {
+                    System.out.println("Connection process dropped");
+                }
+
+                JSONObject reply = new JSONObject();
+                String receivedToken = (String) dataPacket.get("token");
+                if(receivedToken !=null)
+
+                {
+                    AuthTokenDAO authTokenDAO = new AuthTokenDAO();
+                    AuthToken authToken = authTokenDAO.getByToken(receivedToken);
+                    if (authToken == null) {
+                        reply.put("status", "failure");
+                        reply.put("desc", "can't get the token: incorrect format or it's empty");
+                    } else {
+                        UsersDAO usersDAO = new UsersDAO();
+                        User user = usersDAO.getById(authToken.getUserid());
+                        updateSubscriptions(user);
+                        //synchronized (notificationConnections) {
+                        notificationConnections.remove(user);
+                        notificationConnections.put(user, connection);
+                        // }
+                        reply.put("status", "OK");
+                        reply.put("desc", "notification starts");
+                    }
+                }else
+
+                {
+                    reply.put("status", "failure");
+                    reply.put("desc", "incorrect token provided");
+                }
+                try
+
+                {
+                    connection.send(reply);
+                } catch(
+                        IOException e)
+
+                {
+                    throw new RuntimeException(e);
+                }
             }
-        }else{
-            reply.put("status","failure");
-            reply.put("desc","incorrect token provided");
-        }
-        try {
-            connection.send(reply);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
+        }.start();
     }
 
     public static void updateSubscriptions(User user) {
@@ -85,7 +104,7 @@ public class NotificationManager {
         }
     }
 
-    static void notifyInThread(Long threadId, JSONObject notification){
+    static synchronized void notifyInThread(Long threadId, JSONObject notification){
         Long isNotification = 1L;
         notification.put("isNotification", false);
         System.out.println("NOTIFICATION START");
@@ -98,7 +117,10 @@ public class NotificationManager {
         Stack<User> listenersToRemove = new Stack<>();
         HashSet<Long> ignoringUsers = new HashSet<>();
         boolean hasNotificationSet = false;
-        Arrays.asList(path).reversed().forEach(string -> {
+        List<String> list = Arrays.asList(path);
+        Collections.reverse(list);
+        HashSet<User> alreadySent = new HashSet<>();
+        list.forEach(string -> {
             Long parentThreadId = Long.parseLong(string);
             System.out.println(parentThreadId);
             if(threadToListeningUsers.containsKey(parentThreadId)){
@@ -108,8 +130,12 @@ public class NotificationManager {
                     try {
                         if(!parentThreadId.equals(threadId))
                             notification.put("isNotification",true);
-                        connection.send(notification);
-                        ignoringUsers.add(user.getId());
+                        if(!alreadySent.contains(user)) {
+                            connection.send(notification);
+                            alreadySent.add(user);
+                            System.out.println("NOTIFICATION SENT TO USER " + user.getUserName() + "ON thread " + parentThreadId);
+                            ignoringUsers.add(user.getId());
+                        }
                     } catch (IOException e) {
                         listenersToRemove.add(user);
                     }

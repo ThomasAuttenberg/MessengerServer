@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.*?>
+
+<VBox alignment="CENTER" fx:controller="com.messenger.messengerclient.Controllers.AuthController" spacing="20.0" style="-fx-background-color: #454545;" xmlns="http://javafx.com/javafx/17.0.2-ea" xmlns:fx="http://javafx.com/fxml/1">
+    <padding>
+        <Insets bottom="20.0" left="20.0" right="20.0" top="20.0" />
+    </padding>
+   <Pane maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" style="-fx-background-color: #454545;">
+      <children>
+         <TextField fx:id="loginField" layoutX="57.0" layoutY="14.0" style="-fx-background-color: c9c9c9;" />
+          <Button layoutX="215.0" layoutY="44.0" fx:id="loginBtn" style="-fx-border-radius: 5; -fx-border-color: black; -fx-background-color: c9c9c9;" styleClass="btn-default" text="Autorization" />
+         <PasswordField fx:id="passwordField" layoutX="57.0" layoutY="45.0" style="-fx-background-color: c9c9c9;" />
+         <Text fill="#c9c9c9" layoutX="-1.0" layoutY="31.0" strokeType="OUTSIDE" strokeWidth="0.0" text="Login" />
+         <Text fill="#c9c9c9" layoutY="62.0" strokeType="OUTSIDE" strokeWidth="0.0" text="Password" />
+      </children></Pane>
+
+    <Label fx:id="welcomeText" />
+</VBox>

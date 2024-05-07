@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<AnchorPane prefHeight="47.0" prefWidth="502.0" style="-fx-background-color: #535353;" xmlns="http://javafx.com/javafx/17.0.2-ea" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.messenger.messengerclient.Controllers.NavigationController">
+   <children>
+      <TextField fx:id="idField" layoutX="21.0" layoutY="10.0" prefHeight="25.0" prefWidth="335.0" promptText="Введите id диалога" style="-fx-background-color: #404040;" />
+      <Button fx:id="actionButton" layoutX="373.0" layoutY="7.0" mnemonicParsing="false" prefHeight="25.0" prefWidth="91.0" style="-fx-background-color: #595959;" text="Перейти" textFill="WHITE" />
+   </children>
+</AnchorPane>
